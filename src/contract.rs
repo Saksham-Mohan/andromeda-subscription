@@ -484,7 +484,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
 }
 
 pub fn query_subscription(
-    deps: Deps, 
+    deps: Deps,
     creator: String,
     env: Env,
     subscriber: String,
@@ -492,20 +492,19 @@ pub fn query_subscription(
     let key = (creator.clone(), subscriber.clone());
     let mut subscription =
         subscriptions()
-            .may_load(deps.storage, key.clone())? 
+            .may_load(deps.storage, key.clone())?
             .ok_or(ContractError::CustomError {
                 msg: format!(
                     "No subscription found for creator '{}' and subscriber '{}'.",
                     creator, subscriber
                 ),
             })?;
-    
+
     // Evaluate and potentially update the subscription's `is_active` field
     evaluate_subscription_status(&mut subscription, &env);
 
     Ok(subscription)
 }
-
 
 pub fn query_subscriptions_for_creator(
     deps: Deps,
@@ -537,7 +536,6 @@ pub fn query_subscriptions_for_creator(
         })
         .collect();
 
-
     Ok(subscriptions)
 }
 
@@ -545,7 +543,7 @@ pub fn query_subscriptions_for_subscriber(
     deps: Deps,
     subscriber: String,
     env: Env,
-    start_after: Option<(String, String)>, 
+    start_after: Option<(String, String)>,
     limit: Option<u64>,
 ) -> Result<Vec<SubscriptionState>, ContractError> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
@@ -682,10 +680,7 @@ fn query_authorized_addresses(
     Ok(AuthorizedAddressesResponse { addresses })
 }
 
-fn evaluate_subscription_status(
-    subscription: &mut SubscriptionState,
-    env: &Env,
-) {
+fn evaluate_subscription_status(subscription: &mut SubscriptionState, env: &Env) {
     if subscription.is_active {
         if let Expiration::AtTime(end_time) = subscription.end_time {
             if env.block.time > end_time {

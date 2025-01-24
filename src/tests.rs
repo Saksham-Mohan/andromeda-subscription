@@ -1,6 +1,7 @@
 use cosmwasm_std::{
+    from_json,
     testing::{mock_env, mock_info},
-    from_json, to_json_binary, Addr, DepsMut, Response, Uint128,
+    to_json_binary, Addr, DepsMut, Response, Uint128,
 };
 
 use crate::{
@@ -581,7 +582,7 @@ fn test_query_subscription_success() {
     let token_id = "token_1".to_string();
     let nft_address = "nft_contract".to_string();
     let payment_amount = Uint128::from(100u128);
-    let duration = 3600; 
+    let duration = 3600;
 
     let subscription = SubscriptionState {
         subscription_id: Uint128::from(1u128),
@@ -614,7 +615,10 @@ fn test_query_subscription_success() {
     let res = query(deps.as_ref(), env.clone(), query_msg).unwrap();
     let queried_subscription: SubscriptionState = from_json(&res).unwrap();
 
-    assert_eq!(queried_subscription.subscription_id, subscription.subscription_id);
+    assert_eq!(
+        queried_subscription.subscription_id,
+        subscription.subscription_id
+    );
     assert_eq!(queried_subscription.creator, creator);
     assert_eq!(queried_subscription.subscriber, subscriber);
     assert_eq!(queried_subscription.is_active, true);
@@ -634,7 +638,7 @@ fn test_query_subscriptions_for_creator_success() {
     let token_id = "token_1".to_string();
     let nft_address = "nft_contract".to_string();
     let payment_amount = Uint128::from(100u128);
-    let duration = 3600; 
+    let duration = 3600;
 
     let subscription_1 = SubscriptionState {
         subscription_id: Uint128::from(1u128),
