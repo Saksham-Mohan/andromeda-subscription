@@ -1,12 +1,12 @@
 use cosmwasm_std::{
     testing::{mock_env, mock_info},
-    to_json_binary, Addr, DepsMut, Response, Uint128,
+    from_json, to_json_binary, Addr, DepsMut, Response, Uint128,
 };
 
 use crate::{
-    contract::{execute, instantiate},
+    contract::{execute, instantiate, query},
     state::{subscriptions, SubscriptionState},
-    subscription::{Cw20HookMsg, Cw721HookMsg, ExecuteMsg, InstantiateMsg},
+    subscription::{Cw20HookMsg, Cw721HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg},
 };
 
 pub use andromeda_std::{
@@ -569,4 +569,299 @@ fn test_execute_cancel_failure_no_subscription() {
             )
         }
     );
+}
+
+#[test]
+fn test_query_subscription_success() {
+    let mut deps = mock_dependencies_custom(&[]);
+    let env = mock_env();
+
+    let creator = "creator".to_string();
+    let subscriber = "subscriber".to_string();
+    let token_id = "token_1".to_string();
+    let nft_address = "nft_contract".to_string();
+    let payment_amount = Uint128::from(100u128);
+    let duration = 3600; 
+
+    let subscription = SubscriptionState {
+        subscription_id: Uint128::from(1u128),
+        creator: creator.clone(),
+        subscriber: subscriber.clone(),
+        token_id: token_id.clone(),
+        nft_address: nft_address.clone(),
+        start_time: Expiration::AtTime(env.block.time),
+        end_time: Expiration::AtTime(env.block.time.plus_seconds(duration)),
+        payment_amount,
+        payment_pending: Uint128::zero(),
+        payment_denom: "CW20".to_string(),
+        subscription_duration: duration,
+        is_active: true,
+    };
+
+    subscriptions()
+        .save(
+            deps.as_mut().storage,
+            (creator.clone(), subscriber.clone()),
+            &subscription,
+        )
+        .unwrap();
+
+    let query_msg = QueryMsg::Subscription {
+        creator: creator.clone(),
+        subscriber: subscriber.clone(),
+    };
+
+    let res = query(deps.as_ref(), env.clone(), query_msg).unwrap();
+    let queried_subscription: SubscriptionState = from_json(&res).unwrap();
+
+    assert_eq!(queried_subscription.subscription_id, subscription.subscription_id);
+    assert_eq!(queried_subscription.creator, creator);
+    assert_eq!(queried_subscription.subscriber, subscriber);
+    assert_eq!(queried_subscription.is_active, true);
+    assert_eq!(queried_subscription.payment_amount, payment_amount);
+    assert_eq!(queried_subscription.start_time, subscription.start_time);
+    assert_eq!(queried_subscription.end_time, subscription.end_time);
+}
+
+#[test]
+fn test_query_subscriptions_for_creator_success() {
+    let mut deps = mock_dependencies_custom(&[]);
+    let env = mock_env();
+
+    let creator = "creator".to_string();
+    let subscriber_1 = "subscriber_1".to_string();
+    let subscriber_2 = "subscriber_2".to_string();
+    let token_id = "token_1".to_string();
+    let nft_address = "nft_contract".to_string();
+    let payment_amount = Uint128::from(100u128);
+    let duration = 3600; 
+
+    let subscription_1 = SubscriptionState {
+        subscription_id: Uint128::from(1u128),
+        creator: creator.clone(),
+        subscriber: subscriber_1.clone(),
+        token_id: token_id.clone(),
+        nft_address: nft_address.clone(),
+        start_time: Expiration::AtTime(env.block.time),
+        end_time: Expiration::AtTime(env.block.time.plus_seconds(duration)),
+        payment_amount,
+        payment_pending: Uint128::zero(),
+        payment_denom: "CW20".to_string(),
+        subscription_duration: duration,
+        is_active: true,
+    };
+
+    let subscription_2 = SubscriptionState {
+        subscription_id: Uint128::from(2u128),
+        creator: creator.clone(),
+        subscriber: subscriber_2.clone(),
+        token_id: token_id.clone(),
+        nft_address: nft_address.clone(),
+        start_time: Expiration::AtTime(env.block.time),
+        end_time: Expiration::AtTime(env.block.time.plus_seconds(duration)),
+        payment_amount,
+        payment_pending: Uint128::zero(),
+        payment_denom: "CW20".to_string(),
+        subscription_duration: duration,
+        is_active: true,
+    };
+
+    subscriptions()
+        .save(
+            deps.as_mut().storage,
+            (creator.clone(), subscriber_1.clone()),
+            &subscription_1,
+        )
+        .unwrap();
+
+    subscriptions()
+        .save(
+            deps.as_mut().storage,
+            (creator.clone(), subscriber_2.clone()),
+            &subscription_2,
+        )
+        .unwrap();
+
+    let query_msg = QueryMsg::SubscriptionsForCreator {
+        creator: creator.clone(),
+        start_after: None,
+        limit: Some(10),
+    };
+
+    let res = query(deps.as_ref(), env.clone(), query_msg).unwrap();
+    let queried_subscriptions: Vec<SubscriptionState> = from_json(&res).unwrap();
+
+    assert_eq!(queried_subscriptions.len(), 2);
+    assert_eq!(queried_subscriptions[0].subscriber, subscriber_1);
+    assert_eq!(queried_subscriptions[1].subscriber, subscriber_2);
+}
+
+#[test]
+fn test_query_subscription_ids_for_active_subscriptions() {
+    let mut deps = mock_dependencies_custom(&[]);
+    let env = mock_env();
+
+    let creator = "creator".to_string();
+    let subscriber_1 = "subscriber_1".to_string();
+    let subscriber_2 = "subscriber_2".to_string();
+    let token_id = "token_1".to_string();
+    let nft_address = "nft_contract".to_string();
+    let payment_amount = Uint128::from(100u128);
+    let duration = 3600;
+
+    let active_subscription = SubscriptionState {
+        subscription_id: Uint128::from(1u128),
+        creator: creator.clone(),
+        subscriber: subscriber_1.clone(),
+        token_id: token_id.clone(),
+        nft_address: nft_address.clone(),
+        start_time: Expiration::AtTime(env.block.time),
+        end_time: Expiration::AtTime(env.block.time.plus_seconds(duration)),
+        payment_amount,
+        payment_pending: Uint128::zero(),
+        payment_denom: "CW20".to_string(),
+        subscription_duration: duration,
+        is_active: true,
+    };
+
+    let inactive_subscription = SubscriptionState {
+        subscription_id: Uint128::from(2u128),
+        creator: creator.clone(),
+        subscriber: subscriber_2.clone(),
+        token_id: token_id.clone(),
+        nft_address: nft_address.clone(),
+        start_time: Expiration::AtTime(env.block.time),
+        end_time: Expiration::AtTime(env.block.time.minus_seconds(duration)),
+        payment_amount,
+        payment_pending: Uint128::zero(),
+        payment_denom: "CW20".to_string(),
+        subscription_duration: duration,
+        is_active: false,
+    };
+
+    subscriptions()
+        .save(
+            deps.as_mut().storage,
+            (creator.clone(), subscriber_1.clone()),
+            &active_subscription,
+        )
+        .unwrap();
+
+    subscriptions()
+        .save(
+            deps.as_mut().storage,
+            (creator.clone(), subscriber_2.clone()),
+            &inactive_subscription,
+        )
+        .unwrap();
+
+    let query_msg = QueryMsg::SubscriptionIdsForActiveSubscriptions {
+        start_after: None,
+        limit: Some(10),
+    };
+
+    let res = query(deps.as_ref(), env.clone(), query_msg).unwrap();
+    let queried_ids: Vec<Uint128> = from_json(&res).unwrap();
+
+    assert_eq!(queried_ids.len(), 1);
+    assert_eq!(queried_ids[0], active_subscription.subscription_id);
+}
+
+#[test]
+fn test_query_active_subscription_ids() {
+    let mut deps = mock_dependencies_custom(&[]);
+    let env = mock_env();
+
+    // Add two active subscriptions and one expired subscription to the state
+    let active_subscription_1 = SubscriptionState {
+        subscription_id: Uint128::from(1u128),
+        creator: "creator_1".to_string(),
+        subscriber: "subscriber_1".to_string(),
+        token_id: "token_1".to_string(),
+        nft_address: "nft_address_1".to_string(),
+        start_time: Expiration::AtTime(env.block.time.minus_seconds(100)),
+        end_time: Expiration::AtTime(env.block.time.plus_seconds(100)), // Active
+        payment_amount: Uint128::from(100u128),
+        payment_pending: Uint128::zero(),
+        payment_denom: "CW20".to_string(),
+        subscription_duration: 200,
+        is_active: true,
+    };
+
+    let active_subscription_2 = SubscriptionState {
+        subscription_id: Uint128::from(2u128),
+        creator: "creator_2".to_string(),
+        subscriber: "subscriber_2".to_string(),
+        token_id: "token_2".to_string(),
+        nft_address: "nft_address_2".to_string(),
+        start_time: Expiration::AtTime(env.block.time.minus_seconds(200)),
+        end_time: Expiration::AtTime(env.block.time.plus_seconds(50)), // Active
+        payment_amount: Uint128::from(200u128),
+        payment_pending: Uint128::zero(),
+        payment_denom: "CW20".to_string(),
+        subscription_duration: 250,
+        is_active: true,
+    };
+
+    let expired_subscription = SubscriptionState {
+        subscription_id: Uint128::from(3u128),
+        creator: "creator_3".to_string(),
+        subscriber: "subscriber_3".to_string(),
+        token_id: "token_3".to_string(),
+        nft_address: "nft_address_3".to_string(),
+        start_time: Expiration::AtTime(env.block.time.minus_seconds(300)),
+        end_time: Expiration::AtTime(env.block.time.minus_seconds(100)), // Expired
+        payment_amount: Uint128::from(300u128),
+        payment_pending: Uint128::zero(),
+        payment_denom: "CW20".to_string(),
+        subscription_duration: 200,
+        is_active: true,
+    };
+
+    subscriptions()
+        .save(
+            deps.as_mut().storage,
+            (
+                active_subscription_1.nft_address.clone(),
+                active_subscription_1.subscriber.clone(),
+            ),
+            &active_subscription_1,
+        )
+        .unwrap();
+
+    subscriptions()
+        .save(
+            deps.as_mut().storage,
+            (
+                active_subscription_2.nft_address.clone(),
+                active_subscription_2.subscriber.clone(),
+            ),
+            &active_subscription_2,
+        )
+        .unwrap();
+
+    subscriptions()
+        .save(
+            deps.as_mut().storage,
+            (
+                expired_subscription.nft_address.clone(),
+                expired_subscription.subscriber.clone(),
+            ),
+            &expired_subscription,
+        )
+        .unwrap();
+
+    let query_msg = QueryMsg::SubscriptionIdsForActiveSubscriptions {
+        start_after: None,
+        limit: None,
+    };
+
+    let res = query(deps.as_ref(), env.clone(), query_msg).unwrap();
+    let active_ids: Vec<Uint128> = from_json(&res).unwrap();
+
+    // Assert only the active subscription IDs are returned
+    assert_eq!(active_ids.len(), 2);
+    assert!(active_ids.contains(&Uint128::from(1u128)));
+    assert!(active_ids.contains(&Uint128::from(2u128)));
+    assert!(!active_ids.contains(&Uint128::from(3u128)));
 }

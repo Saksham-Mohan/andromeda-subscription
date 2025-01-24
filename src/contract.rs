@@ -2,9 +2,13 @@
 use crate::state::{
     get_and_increment_next_subscription_id, subscriptions, SubscriptionState, NEXT_SUBSCRIPTION_ID,
 };
-use crate::subscription::{Cw20HookMsg, Cw721HookMsg, ExecuteMsg, InstantiateMsg};
+use crate::subscription::{Cw20HookMsg, Cw721HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg};
 
-use cosmwasm_std::{ensure, entry_point, from_json, DepsMut, Env, MessageInfo, Response, Uint128};
+use cosmwasm_std::{
+    ensure, entry_point, from_json, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response,
+    Uint128,
+};
+use cw_storage_plus::Bound;
 
 use andromeda_std::{
     ado_base::InstantiateMsg as BaseInstantiateMsg,
@@ -14,8 +18,9 @@ use andromeda_std::{
         context::ExecuteContext,
         denom::{
             authorize_addresses, execute_authorize_contract, execute_deauthorize_contract,
-            SEND_CW20_ACTION, SEND_NFT_ACTION,
+            AuthorizedAddressesResponse, PermissionAction, SEND_CW20_ACTION, SEND_NFT_ACTION,
         },
+        encode_binary, OrderBy,
     },
     error::ContractError,
 };
@@ -24,6 +29,9 @@ use cw20::Cw20ReceiveMsg;
 use cw721::Cw721ReceiveMsg;
 
 use cw_utils::{nonpayable, Expiration};
+
+const MAX_LIMIT: u64 = 30;
+const DEFAULT_LIMIT: u64 = 10;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:andromeda-subscription";
@@ -403,4 +411,287 @@ pub fn execute_cancel(ctx: ExecuteContext, nft_address: String) -> Result<Respon
         .add_attribute("subscriber", info.sender.to_string())
         .add_attribute("is_active", subscription.is_active.to_string())
         .add_attribute("status", "cancelled"))
+}
+
+#[entry_point]
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
+    match msg {
+        QueryMsg::Subscription {
+            creator,
+            subscriber,
+        } => encode_binary(&query_subscription(deps, creator, env, subscriber)?),
+        QueryMsg::SubscriptionsForCreator {
+            creator,
+            start_after,
+            limit,
+        } => encode_binary(&query_subscriptions_for_creator(
+            deps,
+            creator,
+            env,
+            start_after,
+            limit,
+        )?),
+        QueryMsg::SubscriptionsForSubscriber {
+            subscriber,
+            start_after,
+            limit,
+        } => encode_binary(&query_subscriptions_for_subscriber(
+            deps,
+            subscriber,
+            env,
+            start_after,
+            limit,
+        )?),
+        QueryMsg::SubscriptionIdsForCreator {
+            creator,
+            start_after,
+            limit,
+        } => encode_binary(&query_subscription_ids_for_creator(
+            deps,
+            creator,
+            env,
+            start_after,
+            limit,
+        )?),
+        QueryMsg::SubscriptionIdsForSubscriber {
+            subscriber,
+            start_after,
+            limit,
+        } => encode_binary(&query_subscription_ids_for_subscriber(
+            deps,
+            subscriber,
+            env,
+            start_after,
+            limit,
+        )?),
+        QueryMsg::SubscriptionIdsForActiveSubscriptions { start_after, limit } => encode_binary(
+            &query_subscription_ids_for_active_subscriptions(deps, env, start_after, limit)?,
+        ),
+        QueryMsg::AuthorizedAddresses {
+            action,
+            start_after,
+            limit,
+            order_by,
+        } => encode_binary(&query_authorized_addresses(
+            deps,
+            action,
+            start_after,
+            limit,
+            order_by,
+        )?),
+        _ => ADOContract::default().query(deps, env, msg),
+    }
+}
+
+pub fn query_subscription(
+    deps: Deps, 
+    creator: String,
+    env: Env,
+    subscriber: String,
+) -> Result<SubscriptionState, ContractError> {
+    let key = (creator.clone(), subscriber.clone());
+    let mut subscription =
+        subscriptions()
+            .may_load(deps.storage, key.clone())? 
+            .ok_or(ContractError::CustomError {
+                msg: format!(
+                    "No subscription found for creator '{}' and subscriber '{}'.",
+                    creator, subscriber
+                ),
+            })?;
+    
+    // Evaluate and potentially update the subscription's `is_active` field
+    evaluate_subscription_status(&mut subscription, &env);
+
+    Ok(subscription)
+}
+
+
+pub fn query_subscriptions_for_creator(
+    deps: Deps,
+    creator: String,
+    env: Env,
+    start_after: Option<(String, String)>,
+    limit: Option<u64>,
+) -> Result<Vec<SubscriptionState>, ContractError> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+
+    // Convert `start_after` into `Bound` if provided
+    let start = start_after.map(|key| Bound::exclusive(key));
+
+    let subscriptions = subscriptions()
+        .keys(deps.storage, start, None, Order::Ascending)
+        .filter_map(|res| {
+            let key = res.ok()?; // Ensure key exists and is valid
+            if key.0 == creator {
+                Some(key)
+            } else {
+                None
+            }
+        })
+        .take(limit)
+        .filter_map(|key| {
+            let mut subscription = subscriptions().may_load(deps.storage, key).ok().flatten()?;
+            evaluate_subscription_status(&mut subscription, &env); // Evaluate `is_active`
+            Some(subscription)
+        })
+        .collect();
+
+
+    Ok(subscriptions)
+}
+
+pub fn query_subscriptions_for_subscriber(
+    deps: Deps,
+    subscriber: String,
+    env: Env,
+    start_after: Option<(String, String)>, 
+    limit: Option<u64>,
+) -> Result<Vec<SubscriptionState>, ContractError> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+
+    let start = start_after.map(|key| Bound::exclusive(key));
+
+    let subscriptions = subscriptions()
+        .keys(deps.storage, start, None, Order::Ascending)
+        .filter_map(|res| {
+            let key = res.ok()?; // Ensure key exists and is valid
+            if key.1 == subscriber {
+                Some(key)
+            } else {
+                None
+            }
+        })
+        .take(limit)
+        .filter_map(|key| {
+            let mut subscription = subscriptions().may_load(deps.storage, key).ok().flatten()?;
+            evaluate_subscription_status(&mut subscription, &env); // Evaluate `is_active`
+            Some(subscription)
+        })
+        .collect();
+
+    Ok(subscriptions)
+}
+
+pub fn query_subscription_ids_for_creator(
+    deps: Deps,
+    creator: String,
+    env: Env,
+    start_after: Option<(String, String)>,
+    limit: Option<u64>,
+) -> Result<Vec<Uint128>, ContractError> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+
+    let start = start_after.map(|key| Bound::exclusive(key));
+
+    let subscription_ids = subscriptions()
+        .keys(deps.storage, start, None, Order::Ascending)
+        .filter_map(|res| {
+            let key = res.ok()?;
+            if key.0 == creator {
+                Some(key)
+            } else {
+                None
+            }
+        })
+        .take(limit)
+        .filter_map(|key| {
+            let mut subscription = subscriptions().may_load(deps.storage, key).ok().flatten()?;
+            evaluate_subscription_status(&mut subscription, &env); // Evaluate `is_active`
+            Some(subscription.subscription_id)
+        })
+        .collect();
+
+    Ok(subscription_ids)
+}
+
+pub fn query_subscription_ids_for_subscriber(
+    deps: Deps,
+    subscriber: String,
+    env: Env,
+    start_after: Option<(String, String)>,
+    limit: Option<u64>,
+) -> Result<Vec<Uint128>, ContractError> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+
+    let start = start_after.map(|key| Bound::exclusive(key));
+
+    let subscription_ids = subscriptions()
+        .keys(deps.storage, start, None, Order::Ascending)
+        .filter_map(|res| {
+            let key = res.ok()?;
+            if key.1 == subscriber {
+                Some(key)
+            } else {
+                None
+            }
+        })
+        .take(limit)
+        .filter_map(|key| {
+            let mut subscription = subscriptions().may_load(deps.storage, key).ok().flatten()?;
+            evaluate_subscription_status(&mut subscription, &env); // Evaluate `is_active`
+            Some(subscription.subscription_id)
+        })
+        .collect();
+
+    Ok(subscription_ids)
+}
+
+pub fn query_subscription_ids_for_active_subscriptions(
+    deps: Deps,
+    env: Env,
+    start_after: Option<(String, String)>,
+    limit: Option<u64>,
+) -> Result<Vec<Uint128>, ContractError> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+
+    let start = start_after.map(|key| Bound::exclusive(key));
+
+    let subscription_ids = subscriptions()
+        .keys(deps.storage, start, None, Order::Ascending)
+        .filter_map(|res| {
+            let key = res.ok()?;
+            let mut subscription = subscriptions().may_load(deps.storage, key).ok().flatten()?;
+            evaluate_subscription_status(&mut subscription, &env); // Evaluate `is_active`
+            if subscription.is_active {
+                Some(subscription.subscription_id)
+            } else {
+                None
+            }
+        })
+        .take(limit)
+        .collect();
+
+    Ok(subscription_ids)
+}
+
+fn query_authorized_addresses(
+    deps: Deps,
+    action: PermissionAction,
+    start_after: Option<String>,
+    limit: Option<u32>,
+    order_by: Option<OrderBy>,
+) -> Result<AuthorizedAddressesResponse, ContractError> {
+    let addresses = ADOContract::default().query_permissioned_actors(
+        deps,
+        action.as_str(),
+        start_after,
+        limit,
+        order_by,
+    )?;
+    Ok(AuthorizedAddressesResponse { addresses })
+}
+
+fn evaluate_subscription_status(
+    subscription: &mut SubscriptionState,
+    env: &Env,
+) {
+    if subscription.is_active {
+        if let Expiration::AtTime(end_time) = subscription.end_time {
+            if env.block.time > end_time {
+                subscription.is_active = false; // Mark as inactive
+                subscription.payment_pending = subscription.payment_amount;
+            }
+        }
+    }
 }

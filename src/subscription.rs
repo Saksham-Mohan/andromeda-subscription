@@ -1,12 +1,18 @@
 use andromeda_std::{
     amp::AndrAddr,
-    andr_exec, andr_instantiate,
-    common::{denom::PermissionAction, expiration::Expiry},
+    andr_exec, andr_instantiate, andr_query,
+    common::{
+        denom::{AuthorizedAddressesResponse, PermissionAction},
+        expiration::Expiry,
+        OrderBy,
+    },
 };
-use cosmwasm_schema::cw_serde;
+use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Uint128;
 use cw20::Cw20ReceiveMsg;
 use cw721::Cw721ReceiveMsg;
+
+use crate::state::SubscriptionState;
 
 #[andr_instantiate]
 #[cw_serde]
@@ -35,6 +41,57 @@ pub enum ExecuteMsg {
     DeauthorizeContract {
         action: PermissionAction,
         addr: AndrAddr,
+    },
+}
+
+#[andr_query]
+#[cw_serde]
+#[derive(QueryResponses)]
+pub enum QueryMsg {
+    #[returns(SubscriptionState)]
+    /// Gets the details of a specific subscription using the creator and subscriber composite key.
+    Subscription { creator: String, subscriber: String },
+    #[returns(Vec<SubscriptionState>)]
+    /// Gets all subscriptions for a specific creator, with optional pagination.
+    SubscriptionsForCreator {
+        creator: String,
+        start_after: Option<(String, String)>, // Composite key
+        limit: Option<u64>,
+    },
+    #[returns(Vec<SubscriptionState>)]
+    /// Gets all subscriptions for a specific subscriber, with optional pagination.
+    SubscriptionsForSubscriber {
+        subscriber: String,
+        start_after: Option<(String, String)>, // Composite key
+        limit: Option<u64>,
+    },
+    #[returns(Vec<Uint128>)]
+    /// Gets all subscription IDs for a specific creator, with optional pagination.
+    SubscriptionIdsForCreator {
+        creator: String,
+        start_after: Option<(String, String)>, // Composite key
+        limit: Option<u64>,
+    },
+    #[returns(Vec<Uint128>)]
+    /// Gets all subscription IDs for a specific subscriber, with optional pagination.
+    SubscriptionIdsForSubscriber {
+        subscriber: String,
+        start_after: Option<(String, String)>, // Composite key
+        limit: Option<u64>,
+    },
+    #[returns(Vec<Uint128>)]
+    /// Gets all active subscription IDs, with optional pagination.
+    SubscriptionIdsForActiveSubscriptions {
+        start_after: Option<(String, String)>, // Composite key
+        limit: Option<u64>,
+    },
+    #[returns(AuthorizedAddressesResponse)]
+    /// Gets the authorized addresses for a given action.
+    AuthorizedAddresses {
+        action: PermissionAction,
+        start_after: Option<String>,
+        limit: Option<u32>,
+        order_by: Option<OrderBy>,
     },
 }
 
