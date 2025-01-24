@@ -6,22 +6,18 @@ use cosmwasm_std::{
 use crate::{
     contract::{execute, instantiate},
     state::{subscriptions, SubscriptionState},
-    subscription::{ExecuteMsg, InstantiateMsg, Cw20HookMsg, Cw721HookMsg},
+    subscription::{Cw20HookMsg, Cw721HookMsg, ExecuteMsg, InstantiateMsg},
 };
 
 pub use andromeda_std::{
+    ado_base::permissioning::{LocalPermission, Permission},
     ado_contract::ADOContract,
-    ado_base::{
-        permissioning::{LocalPermission, Permission},
-    },
     amp::AndrAddr,
-    error::ContractError,
     common::{
         context::ExecuteContext,
-        denom::{
-            SEND_CW20_ACTION, SEND_NFT_ACTION,
-        }
+        denom::{SEND_CW20_ACTION, SEND_NFT_ACTION},
     },
+    error::ContractError,
     testing::mock_querier::{mock_dependencies_custom, MOCK_APP_CONTRACT, MOCK_KERNEL_CONTRACT},
 };
 
@@ -180,7 +176,7 @@ fn test_execute_subscribe_success() {
     let token_id = "token_1".to_string();
     let nft_address = cw20_address.clone(); // Use the authorized CW20 address
     let payment_amount = Uint128::from(100u128);
-    let duration = 3600; 
+    let duration = 3600;
 
     let offering = SubscriptionState {
         subscription_id: Uint128::from(1u128),
@@ -231,10 +227,16 @@ fn test_execute_subscribe_success() {
 
     // Validate the state
     let saved_subscription = subscriptions()
-        .load(deps.as_ref().storage, (nft_address.clone(), "user".to_string()))
+        .load(
+            deps.as_ref().storage,
+            (nft_address.clone(), "user".to_string()),
+        )
         .unwrap();
     assert!(saved_subscription.is_active);
-    assert_eq!(saved_subscription.start_time, Expiration::AtTime(env.block.time));
+    assert_eq!(
+        saved_subscription.start_time,
+        Expiration::AtTime(env.block.time)
+    );
     assert_eq!(
         saved_subscription.end_time,
         Expiration::AtTime(env.block.time.plus_seconds(duration))
@@ -319,7 +321,10 @@ fn test_execute_renew_success() {
 
     // Validate the updated state
     let renewed_subscription = subscriptions()
-        .load(deps.as_ref().storage, (nft_address.clone(), subscriber.clone()))
+        .load(
+            deps.as_ref().storage,
+            (nft_address.clone(), subscriber.clone()),
+        )
         .unwrap();
 
     assert!(renewed_subscription.is_active);
@@ -383,7 +388,10 @@ fn test_execute_receive_cw721_success() {
 
     // Validate the state
     let saved_subscription = subscriptions()
-        .load(deps.as_ref().storage, (cw721_address.clone(), "".to_string()))
+        .load(
+            deps.as_ref().storage,
+            (cw721_address.clone(), "".to_string()),
+        )
         .unwrap();
     assert!(!saved_subscription.is_active);
     assert_eq!(saved_subscription.token_id, token_id);
@@ -427,10 +435,22 @@ fn test_execute_receive_cw721_duplicate_registration() {
     let cw721_info = mock_info(&cw721_address, &[]);
 
     // Execute the handler for the first time (success)
-    execute(deps.as_mut(), env.clone(), cw721_info.clone(), execute_msg.clone()).unwrap();
+    execute(
+        deps.as_mut(),
+        env.clone(),
+        cw721_info.clone(),
+        execute_msg.clone(),
+    )
+    .unwrap();
 
     // Attempt to register the same subscription again
-    let err = execute(deps.as_mut(), env.clone(), cw721_info.clone(), execute_msg.clone()).unwrap_err();
+    let err = execute(
+        deps.as_mut(),
+        env.clone(),
+        cw721_info.clone(),
+        execute_msg.clone(),
+    )
+    .unwrap_err();
     assert_eq!(
         err,
         ContractError::CustomError {

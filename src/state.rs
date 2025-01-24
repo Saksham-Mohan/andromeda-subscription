@@ -1,4 +1,4 @@
-use andromeda_std::{error::ContractError};
+use andromeda_std::error::ContractError;
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Order, Storage, Uint128};
 use cw_storage_plus::{Bound, Index, IndexList, IndexedMap, Item, MultiIndex};
@@ -14,18 +14,18 @@ pub const NEXT_SUBSCRIPTION_ID: Item<Uint128> = Item::new("next_subscription_id"
 /// Stores the state of individual subscriptions
 #[cw_serde]
 pub struct SubscriptionState {
-    pub subscription_id: Uint128,      // Unique subscription ID
-    pub creator: String,               // Address of the content creator
-    pub subscriber: String,            // Address of the subscriber
-    pub token_id: String,              // NFT token ID
-    pub nft_address: String,           // NFT contract address
-    pub start_time: Expiration,        // Subscription start time
-    pub end_time: Expiration,          // Subscription end time
-    pub payment_amount: Uint128,       // Payment amount for subscription
-    pub payment_pending: Uint128,       // Payment amount pending for current for this subscription
-    pub payment_denom: String,         // Denomination of the payment (CW20 or native token)
-    pub subscription_duration: u64,    // Default subscription duration in seconds (specified by creator)
-    pub is_active: bool,               // Tracks if the subscription is active
+    pub subscription_id: Uint128,   // Unique subscription ID
+    pub creator: String,            // Address of the content creator
+    pub subscriber: String,         // Address of the subscriber
+    pub token_id: String,           // NFT token ID
+    pub nft_address: String,        // NFT contract address
+    pub start_time: Expiration,     // Subscription start time
+    pub end_time: Expiration,       // Subscription end time
+    pub payment_amount: Uint128,    // Payment amount for subscription
+    pub payment_pending: Uint128,   // Payment amount pending for current for this subscription
+    pub payment_denom: String,      // Denomination of the payment (CW20 or native token)
+    pub subscription_duration: u64, // Default subscription duration in seconds (specified by creator)
+    pub is_active: bool,            // Tracks if the subscription is active
 }
 
 /// Index structure for subscriptions
@@ -43,7 +43,8 @@ impl<'a> IndexList<SubscriptionState> for SubscriptionIndices<'a> {
 }
 
 /// Indexed map to store subscriptions and their secondary indices
-pub fn subscriptions<'a>() -> IndexedMap<'a, (String, String), SubscriptionState, SubscriptionIndices<'a>> {
+pub fn subscriptions<'a>(
+) -> IndexedMap<'a, (String, String), SubscriptionState, SubscriptionIndices<'a>> {
     let indices = SubscriptionIndices {
         creator: MultiIndex::new(
             |_pk, subscription| subscription.creator.clone(),

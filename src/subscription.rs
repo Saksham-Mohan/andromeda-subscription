@@ -1,15 +1,12 @@
 use andromeda_std::{
-    amp::{AndrAddr},
+    amp::AndrAddr,
     andr_exec, andr_instantiate,
-    common::{
-        denom::{PermissionAction},
-        expiration::Expiry,
-    }
+    common::{denom::PermissionAction, expiration::Expiry},
 };
-use cosmwasm_schema::{cw_serde};
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Uint128;
 use cw20::Cw20ReceiveMsg;
-use cw721::{Cw721ReceiveMsg};
+use cw721::Cw721ReceiveMsg;
 
 #[andr_instantiate]
 #[cw_serde]
@@ -28,14 +25,14 @@ pub enum ExecuteMsg {
     ReceiveNft(Cw721ReceiveMsg),
     /// Cancel an existing subscription.
     Cancel { nft_address: String },
-    /// Restricted to owner. 
+    /// Restricted to owner.
     AuthorizeContract {
         action: PermissionAction,
         addr: AndrAddr,
         expiration: Option<Expiry>,
     },
-   /// Restricted to owner
-   DeauthorizeContract {
+    /// Restricted to owner
+    DeauthorizeContract {
         action: PermissionAction,
         addr: AndrAddr,
     },

@@ -1,17 +1,20 @@
 #[cfg(not(feature = "library"))]
-use crate::state::{NEXT_SUBSCRIPTION_ID, SubscriptionState, get_and_increment_next_subscription_id, subscriptions};
-use crate::subscription::{Cw20HookMsg, Cw721HookMsg, InstantiateMsg, ExecuteMsg};
+use crate::state::{
+    get_and_increment_next_subscription_id, subscriptions, SubscriptionState, NEXT_SUBSCRIPTION_ID,
+};
+use crate::subscription::{Cw20HookMsg, Cw721HookMsg, ExecuteMsg, InstantiateMsg};
 
 use cosmwasm_std::{ensure, entry_point, from_json, DepsMut, Env, MessageInfo, Response, Uint128};
 
 use andromeda_std::{
-    ado_base::{InstantiateMsg as BaseInstantiateMsg},
+    ado_base::InstantiateMsg as BaseInstantiateMsg,
     ado_contract::ADOContract,
     common::{
         actions::call_action,
         context::ExecuteContext,
         denom::{
-            authorize_addresses, execute_authorize_contract, execute_deauthorize_contract, SEND_CW20_ACTION, SEND_NFT_ACTION,
+            authorize_addresses, execute_authorize_contract, execute_deauthorize_contract,
+            SEND_CW20_ACTION, SEND_NFT_ACTION,
         },
     },
     error::ContractError,
@@ -89,21 +92,18 @@ pub fn handle_execute(mut ctx: ExecuteContext, msg: ExecuteMsg) -> Result<Respon
         &ctx.amp_ctx,
         msg.as_ref(),
     )?;
-    let res = match msg { 
+    let res = match msg {
         ExecuteMsg::ReceiveNft(msg) => handle_receive_cw721(ctx, msg),
         ExecuteMsg::Receive(msg) => handle_receive_cw20(ctx, msg),
-        ExecuteMsg::Cancel {
-            nft_address,
-        } => execute_cancel(ctx, nft_address),
+        ExecuteMsg::Cancel { nft_address } => execute_cancel(ctx, nft_address),
         ExecuteMsg::AuthorizeContract {
             action,
             addr,
             expiration,
         } => execute_authorize_contract(ctx.deps, ctx.info, action, addr, expiration),
-        ExecuteMsg::DeauthorizeContract {
-            action,
-            addr,
-        } => execute_deauthorize_contract(ctx.deps, ctx.info, action, addr),
+        ExecuteMsg::DeauthorizeContract { action, addr } => {
+            execute_deauthorize_contract(ctx.deps, ctx.info, action, addr)
+        }
         _ => ADOContract::default().execute(ctx, msg),
     }?;
 
@@ -125,7 +125,12 @@ pub fn handle_receive_cw20(
         ctx.info.sender.clone(),
     )?;
 
-    let ExecuteContext { ref info, ref env, ref mut deps, .. } = ctx;
+    let ExecuteContext {
+        ref info,
+        ref env,
+        ref mut deps,
+        ..
+    } = ctx;
 
     // Ensure the transaction is non-payable
     nonpayable(info)?;
@@ -141,7 +146,10 @@ pub fn handle_receive_cw20(
     );
 
     match from_json(&receive_msg.msg)? {
-        Cw20HookMsg::Subscribe { token_id, nft_address } => {
+        Cw20HookMsg::Subscribe {
+            token_id,
+            nft_address,
+        } => {
             // Step 1: Check for open subscription (creator address + empty subscriber)
             let open_key = (nft_address.clone(), String::new());
             let open_subscription = subscriptions()
@@ -152,25 +160,27 @@ pub fn handle_receive_cw20(
                         nft_address
                     ),
                 })?;
-            
+
             ensure!(
                 !open_subscription.is_active,
                 ContractError::CustomError {
-                msg: "This subscription is already marked as active.".to_string(),
+                    msg: "This subscription is already marked as active.".to_string(),
                 }
             );
 
-             // Step 2: Check for existing subscription for this user (creator address + subscriber)
-             let user_key = (nft_address.clone(), subscriber.clone());
-             if let Some(existing_subscription) = subscriptions().may_load(deps.storage, user_key.clone())? {
-                    return Err(ContractError::CustomError {
+            // Step 2: Check for existing subscription for this user (creator address + subscriber)
+            let user_key = (nft_address.clone(), subscriber.clone());
+            if let Some(existing_subscription) =
+                subscriptions().may_load(deps.storage, user_key.clone())?
+            {
+                return Err(ContractError::CustomError {
                          msg: format!(
                             "You already have a subscription to {} offering. Please renew (if inactive) or cancel it.", 
                             existing_subscription.nft_address
                         ),
                      }
                  );
-             }
+            }
 
             // Validate the payment amount
             ensure!(
@@ -191,7 +201,9 @@ pub fn handle_receive_cw20(
                 nft_address: open_subscription.nft_address.clone(),
                 start_time: Expiration::AtTime(env.block.time),
                 end_time: Expiration::AtTime(
-                    env.block.time.plus_seconds(open_subscription.subscription_duration),
+                    env.block
+                        .time
+                        .plus_seconds(open_subscription.subscription_duration),
                 ),
                 payment_amount: open_subscription.payment_amount,
                 payment_pending: open_subscription.payment_amount - amount_sent, // Should Equal 0
@@ -210,61 +222,69 @@ pub fn handle_receive_cw20(
                 .add_attribute("start_time", new_subscription.start_time.to_string())
                 .add_attribute("end_time", new_subscription.end_time.to_string())
                 .add_attribute("is_active", new_subscription.is_active.to_string()))
-        },
-        Cw20HookMsg::Renew { token_id, nft_address } => {
-        let composite_key = (nft_address.clone(), subscriber.clone());
-        let mut subscription = subscriptions()
-            .may_load(deps.storage, composite_key.clone())?
-            .ok_or(ContractError::CustomError {
-                msg: format!(
-                    "No subscription found for creator address {} and subscriber {}.",
-                    nft_address, subscriber
-                ),
-            })?;
+        }
+        Cw20HookMsg::Renew {
+            token_id,
+            nft_address,
+        } => {
+            let composite_key = (nft_address.clone(), subscriber.clone());
+            let mut subscription = subscriptions()
+                .may_load(deps.storage, composite_key.clone())?
+                .ok_or(ContractError::CustomError {
+                    msg: format!(
+                        "No subscription found for creator address {} and subscriber {}.",
+                        nft_address, subscriber
+                    ),
+                })?;
 
-        // Ensure the payment amount matches
-        ensure!(
-            amount_sent == subscription.payment_amount,
-            ContractError::InvalidFunds {
-                msg: format!(
-                    "Invalid payment amount. Expected {}, received {}.",
-                    subscription.payment_amount, amount_sent
-                ),
-            }
-        );
+            // Ensure the payment amount matches
+            ensure!(
+                amount_sent == subscription.payment_amount,
+                ContractError::InvalidFunds {
+                    msg: format!(
+                        "Invalid payment amount. Expected {}, received {}.",
+                        subscription.payment_amount, amount_sent
+                    ),
+                }
+            );
 
-        if subscription.is_active {
-            if let Expiration::AtTime(end_time) = subscription.end_time {
-                if env.block.time > end_time {
-                    subscription.is_active = false; // Mark as inactive if expired
-                    subscription.payment_pending = subscription.payment_amount;
-                } else {
-                    return Err(ContractError::CustomError {
-                        msg: "Subscription is already active.".to_string(),
-                    });
+            if subscription.is_active {
+                if let Expiration::AtTime(end_time) = subscription.end_time {
+                    if env.block.time > end_time {
+                        subscription.is_active = false; // Mark as inactive if expired
+                        subscription.payment_pending = subscription.payment_amount;
+                    } else {
+                        return Err(ContractError::CustomError {
+                            msg: "Subscription is already active.".to_string(),
+                        });
+                    }
                 }
             }
-        }
-        subscription.start_time = Expiration::AtTime(ctx.env.block.time);
-        subscription.end_time = Expiration::AtTime(ctx.env.block.time.plus_seconds(subscription.subscription_duration));
-        subscription.is_active = true;
-        subscription.payment_pending = subscription.payment_amount - amount_sent; // Should equal 0 
+            subscription.start_time = Expiration::AtTime(ctx.env.block.time);
+            subscription.end_time = Expiration::AtTime(
+                ctx.env
+                    .block
+                    .time
+                    .plus_seconds(subscription.subscription_duration),
+            );
+            subscription.is_active = true;
+            subscription.payment_pending = subscription.payment_amount - amount_sent; // Should equal 0
 
-        // Save the updated subscription
-        subscriptions().save(deps.storage, composite_key, &subscription)?;
+            // Save the updated subscription
+            subscriptions().save(deps.storage, composite_key, &subscription)?;
 
-        Ok(Response::new()
-            .add_attribute("action", "renew_subscription")
-            .add_attribute("subscriber", subscriber)
-            .add_attribute("creator", subscription.creator)
-            .add_attribute("creator address", subscription.nft_address)
-            .add_attribute("token_id", token_id)
-            .add_attribute("new_start_time", subscription.start_time.to_string())
-            .add_attribute("new_end_time", subscription.end_time.to_string())
-            .add_attribute("is_active", subscription.is_active.to_string()))
+            Ok(Response::new()
+                .add_attribute("action", "renew_subscription")
+                .add_attribute("subscriber", subscriber)
+                .add_attribute("creator", subscription.creator)
+                .add_attribute("creator address", subscription.nft_address)
+                .add_attribute("token_id", token_id)
+                .add_attribute("new_start_time", subscription.start_time.to_string())
+                .add_attribute("new_end_time", subscription.end_time.to_string())
+                .add_attribute("is_active", subscription.is_active.to_string()))
         }
     }
-}   
+}
 
 pub fn handle_receive_cw721(
     mut ctx: ExecuteContext,
@@ -310,18 +330,21 @@ pub fn handle_receive_cw721(
                 subscriber: String::new(), // No subscriber yet; empty string or None
                 token_id,
                 nft_address: ctx.info.sender.to_string(), // Address of the CW721 contract
-                start_time: Expiration::Never {}, // Start time is not applicable yet
-                end_time: Expiration::Never {}, // No subscription period yet
+                start_time: Expiration::Never {},         // Start time is not applicable yet
+                end_time: Expiration::Never {},           // No subscription period yet
                 payment_amount,
-                payment_pending: payment_amount, // Full amount pending 
-                payment_denom: "CW20".to_string(), // Default 
+                payment_pending: payment_amount, // Full amount pending
+                payment_denom: "CW20".to_string(), // Default
                 subscription_duration: duration,
-                is_active: false
+                is_active: false,
             };
 
             subscriptions().save(
                 ctx.deps.storage,
-                (subscription.nft_address.clone(), subscription.subscriber.clone()),
+                (
+                    subscription.nft_address.clone(),
+                    subscription.subscriber.clone(),
+                ),
                 &subscription,
             )?;
 
@@ -336,11 +359,10 @@ pub fn handle_receive_cw721(
     }
 }
 
-pub fn execute_cancel(
-    ctx: ExecuteContext,
-    nft_address: String,
-) -> Result<Response, ContractError> {
-    let ExecuteContext { deps, env, info, .. } = ctx;
+pub fn execute_cancel(ctx: ExecuteContext, nft_address: String) -> Result<Response, ContractError> {
+    let ExecuteContext {
+        deps, env, info, ..
+    } = ctx;
 
     let composite_key = (nft_address.clone(), info.sender.to_string());
 
@@ -359,7 +381,7 @@ pub fn execute_cancel(
             if env.block.time > end_time {
                 subscription.is_active = false; // Mark as inactive if expired
                 subscription.payment_pending = subscription.payment_amount;
-            } 
+            }
         }
     }
 
