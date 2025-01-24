@@ -41,11 +41,14 @@ cosmwasm-std = { version = "1.5.0", features = [
   # "cosmwasm_1_4",
 ] }
 cw-storage-plus = "1.1.0"
-cw2 = "1.1.1"
+cw20 = "1.1.1"
+cw721 = "0.18.0"
 schemars = "0.8.15"
-serde = { version = "1.0.189", default-features = false, features = ["derive"] }
+serde = { version = "1.0.127" }
 thiserror = { version = "1.0.49" }
-andromeda-std = { version = "1.0.0-rc1" }
+semver = "1.0.24"
+andromeda-std = { git = "https://github.com/andromedaprotocol/andromeda-core.git", branch = "main" }
+cw-utils = "1.0.3"
 
 [dev-dependencies]
 cw-multi-test = "0.17.0"
