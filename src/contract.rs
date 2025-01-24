@@ -516,7 +516,7 @@ pub fn query_subscriptions_for_creator(
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
 
     // Convert `start_after` into `Bound` if provided
-    let start = start_after.map(|key| Bound::exclusive(key));
+    let start = start_after.map(Bound::exclusive);
 
     let subscriptions = subscriptions()
         .keys(deps.storage, start, None, Order::Ascending)
@@ -548,7 +548,7 @@ pub fn query_subscriptions_for_subscriber(
 ) -> Result<Vec<SubscriptionState>, ContractError> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
 
-    let start = start_after.map(|key| Bound::exclusive(key));
+    let start = start_after.map(Bound::exclusive);
 
     let subscriptions = subscriptions()
         .keys(deps.storage, start, None, Order::Ascending)
@@ -580,7 +580,7 @@ pub fn query_subscription_ids_for_creator(
 ) -> Result<Vec<Uint128>, ContractError> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
 
-    let start = start_after.map(|key| Bound::exclusive(key));
+    let start = start_after.map(Bound::exclusive);
 
     let subscription_ids = subscriptions()
         .keys(deps.storage, start, None, Order::Ascending)
@@ -612,7 +612,7 @@ pub fn query_subscription_ids_for_subscriber(
 ) -> Result<Vec<Uint128>, ContractError> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
 
-    let start = start_after.map(|key| Bound::exclusive(key));
+    let start = start_after.map(Bound::exclusive);
 
     let subscription_ids = subscriptions()
         .keys(deps.storage, start, None, Order::Ascending)
@@ -643,7 +643,7 @@ pub fn query_subscription_ids_for_active_subscriptions(
 ) -> Result<Vec<Uint128>, ContractError> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
 
-    let start = start_after.map(|key| Bound::exclusive(key));
+    let start = start_after.map(Bound::exclusive);
 
     let subscription_ids = subscriptions()
         .keys(deps.storage, start, None, Order::Ascending)
