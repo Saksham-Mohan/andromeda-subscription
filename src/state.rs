@@ -35,7 +35,7 @@ pub struct SubscriptionIndices<'a> {
 }
 
 /// Implementing indices for subscriptions
-impl<'a> IndexList<SubscriptionState> for SubscriptionIndices<'a> {
+impl IndexList<SubscriptionState> for SubscriptionIndices<'_> {
     fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<SubscriptionState>> + '_> {
         let v: Vec<&dyn Index<SubscriptionState>> = vec![&self.creator];
         Box::new(v.into_iter())
@@ -63,7 +63,7 @@ pub fn read_subscriptions(
     limit: Option<u64>,
 ) -> Result<Vec<SubscriptionState>, ContractError> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = start_after.map(|k| Bound::exclusive(k));
+    let start = start_after.map(Bound::exclusive);
 
     let keys = subscriptions()
         .idx
