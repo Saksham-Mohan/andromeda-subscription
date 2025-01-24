@@ -1,93 +1,82 @@
-# Andromeda CosmWasm Starter Pack
+# Overview
+The Subscription ADO is a smart contract designed to enable subscription-based services using blockchain technology. This ADO (Andromeda Decentralized Object) facilitates the creation, management, and utilization of subscription models by securely automating payments, duration tracking, and subscription statuses. The Subscription ADO is versatile and supports use cases such as recurring content access, memberships, or service subscriptions.
 
-**This repo is a variant of the [CosmWasm starter template](https://github.com/CosmWasm/cw-template).**
+## Key Features
+### Creator-Defined Subscription Models:
 
-## Documentation
+Content creators or service providers can define subscription offerings by specifying the duration, payment amount, and token (CW721).
 
-To see what's involved in making an ADO check out our documentation [here](https://docs.andromedaprotocol.io/andromeda/creating-an-ado/getting-started).
+### Secure Subscription Management:
 
-# CosmWasm Template ReadMe
+Subscribers can initiate subscriptions, renew existing ones, or cancel subscriptions securely through the blockchain.
 
-This is a template to build smart contracts in Rust to run inside a
-[Cosmos SDK](https://github.com/cosmos/cosmos-sdk) module on all chains that enable it.
-To understand the framework better, please read the overview in the
-[cosmwasm repo](https://github.com/CosmWasm/cosmwasm/blob/master/README.md),
-and dig into the [cosmwasm docs](https://www.cosmwasm.com).
-This assumes you understand the theory and just want to get coding.
+### Automatic Status Updates:
 
-## Creating a new repo from template
+Subscriptions are automatically marked inactive upon expiration, ensuring up-to-date status tracking.
 
-Assuming you have a recent version of Rust and Cargo installed
-(via [rustup](https://rustup.rs/)),
-then the following should get you a new repo to start a contract:
+### Support for CW20 Tokens:
 
-Install [cargo-generate](https://github.com/ashleygwilliams/cargo-generate) and cargo-run-script.
-Unless you did that before, run this line now:
+Payments can be made using CW20 tokens, with checks to validate authorized tokens and amounts.
 
-```sh
-cargo install cargo-generate --features vendored-openssl
-cargo install cargo-run-script
-```
+### NFT-Driven Subscription Registration:
 
-Now, use it to create your new contract.
-Go to the folder in which you want to place it and run:
+CW721 tokens can be used to register and manage unique subscription offerings, adding flexibility for NFT-based services.
 
-**Latest**
+## Subscription Lifecycle
 
-```sh
-cargo generate --git https://github.com/andromedaprotocol/andr-cw-template.git --name PROJECT_NAME
-```
+### Subscription Registration:
 
-For cloning minimal code repo:
+The creator registers a subscription offering (using CW721), defining terms such as payment amount, duration, and accepted token.
+Subscription Activation:
 
-```sh
-cargo generate --git https://github.com/andromedaprotocol/andr-cw-template.git --name PROJECT_NAME -d minimal=true
-```
+A subscriber initiates a subscription by sending the specified payment (CW20). The subscription state is created and marked as active.
 
-You will now have a new folder called `PROJECT_NAME` (I hope you changed that to something else)
-containing a simple working contract and build system that you can customize.
+### Subscription Renewal:
 
-## Create a Repo
+Subscribers can renew their subscriptions by paying the specified amount, resetting the subscription's start and end times.
 
-After generating, you have a initialized local git repo, but no commits, and no remote.
-Go to a server (eg. github) and create a new upstream repo (called `YOUR-GIT-URL` below).
-Then run the following:
+### Subscription Cancellation:
 
-```sh
-# this is needed to create a valid Cargo.lock file (see below)
-cargo check
-git branch -M main
-git add .
-git commit -m 'Initial Commit'
-git remote add origin YOUR-GIT-URL
-git push -u origin main
-```
+Subscribers can cancel their subscriptions manually. Upon cancellation, the subscription is marked inactive, and future renewals are disabled unless reactivated.
 
-## CI Support
+## Conditions
+The contract includes the following conditions to manage subscriptions:
 
-We have template configurations for both [GitHub Actions](.github/workflows/Basic.yml)
-and [Circle CI](.circleci/config.yml) in the generated project, so you can
-get up and running with CI right away.
+### Expiration:
 
-One note is that the CI runs all `cargo` commands
-with `--locked` to ensure it uses the exact same versions as you have locally. This also means
-you must have an up-to-date `Cargo.lock` file, which is not auto-generated.
-The first time you set up the project (or after adding any dep), you should ensure the
-`Cargo.lock` file is updated, so the CI will test properly. This can be done simply by
-running `cargo check` or `cargo unit-test`.
+Subscriptions automatically become inactive once the end_time is reached.
 
-## Using your project
+### Payment Validation:
 
-Once you have your custom repo, you should check out [Developing](./Developing.md) to explain
-more on how to run tests and develop code. Or go through the
-[online tutorial](https://docs.cosmwasm.com/) to get a better feel
-of how to develop.
+The exact payment amount specified in the subscription offering must be sent to activate or renew a subscription.
 
-[Publishing](./Publishing.md) contains useful information on how to publish your contract
-to the world, once you are ready to deploy it on a running blockchain. And
-[Importing](./Importing.md) contains information about pulling in other contracts or crates
-that have been published.
+### Active Check:
 
-Please replace this README file with information about your specific project. You can keep
-the `Developing.md` and `Publishing.md` files as useful references, but please set some
-proper description in the README.
+An active subscription cannot be re-subscribed. Renewals are only allowed if the subscription is inactive.
+
+## Queries
+The following queries are available to retrieve information about subscriptions:
+
+### Get Subscription:
+
+Retrieve details of a specific subscription using the creator and subscriber IDs.
+
+### List Subscriptions for Creator:
+
+Retrieve all subscriptions associated with a specific creator.
+
+### List Subscriptions for Subscriber:
+
+Retrieve all subscriptions associated with a specific subscriber.
+
+### Active Subscriptions:
+
+Retrieve IDs of all active subscriptions.
+
+### Subscription IDs for Creator:
+
+Retrieve IDs of subscriptions associated with a creator.
+
+### Subscription IDs for Subscriber:
+
+Retrieve IDs of subscriptions associated with a subscriber.
